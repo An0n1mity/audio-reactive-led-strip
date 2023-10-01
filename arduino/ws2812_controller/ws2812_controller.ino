@@ -4,6 +4,7 @@
 * Codebase created by ScottLawsonBC - https://github.com/scottlawsonbc
 */
 #include <NeoPixelBus.h>
+#include <FastLED.h>
 
 #if defined(ESP8266)
 #include <ESP8266WiFi.h>
@@ -15,18 +16,19 @@
 #endif
 
 // Set to the number of LEDs in your LED strip
-#define NUM_LEDS 60
+#define NUM_LEDS 150
 // Maximum number of packets to hold in the buffer. Don't change this.
 #define BUFFER_LEN 1024
 // Toggles FPS output (1 = print FPS over serial, 0 = disable output)
-#define PRINT_FPS 1
+#define PRINT_FPS 0
 
 //NeoPixelBus settings
 const uint8_t PixelPin = 3;  // make sure to set this to the correct pin, ignored for Esp8266(set to 3 by default for DMA)
+CRGB leds[NUM_LEDS];
 
 // Wifi and socket settings
-const char* ssid     = "YOUR_WIFI_SSID";
-const char* password = "YOUR_WIFI_PASSWORD";
+const char* ssid     = "EvilAP";
+const char* password = "oofty777";
 unsigned int localPort = 7777;
 char packetBuffer[BUFFER_LEN];
 
@@ -35,9 +37,9 @@ uint8_t N = 0;
 WiFiUDP port;
 // Network information
 // IP must match the IP in config.py
-IPAddress ip(192, 168, 0, 150);
+IPAddress ip(192, 168, 191, 150);
 // Set gateway to your router's gateway
-IPAddress gateway(192, 168, 0, 1);
+IPAddress gateway(192, 168, 191, 103);
 IPAddress subnet(255, 255, 255, 0);
 NeoPixelBus<NeoGrbFeature, Neo800KbpsMethod> ledstrip(NUM_LEDS, PixelPin);
 
@@ -61,8 +63,10 @@ void setup() {
     
     port.begin(localPort);
     
-    ledstrip.Begin();//Begin output
-    ledstrip.Show();//Clear the strip for use
+    FastLED.addLeds<WS2812B, PixelPin, GRB>(leds, NUM_LEDS);
+
+    //ledstrip.Begin();//Begin output
+    //ledstrip.Show();//Clear the strip for use
 }
 
 #if PRINT_FPS
@@ -77,12 +81,15 @@ void loop() {
     if (packetSize) {
         int len = port.read(packetBuffer, BUFFER_LEN);
         for(int i = 0; i < len; i+=4) {
-            packetBuffer[len] = 0;
+            //packetBuffer[len] = 0;
             N = packetBuffer[i];
             RgbColor pixel((uint8_t)packetBuffer[i+1], (uint8_t)packetBuffer[i+2], (uint8_t)packetBuffer[i+3]);//color
-            ledstrip.SetPixelColor(N, pixel);//N is the pixel number
+            //ledstrip.SetPixelColor(N, pixel);//N is the pixel number
+            leds[N] = CRGB(pixel.R, pixel.G, pixel.B);
+
         } 
-        ledstrip.Show();
+        //ledstrip.Show();
+        FastLED.show();
         #if PRINT_FPS
             fpsCounter++;
             Serial.print("/");//Monitors connection(shows jumps/jitters in packets)
