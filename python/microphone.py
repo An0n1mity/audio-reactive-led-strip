@@ -3,60 +3,62 @@ import numpy as np
 import pyaudiowpatch as pyaudio
 import config
 
-# constant to define if loopback device is used or microphone
-USE_LOOPBACK = False
+IS_STREAMING = False
 
-def start_stream(callback):
+def list_input_devices():
     p = pyaudio.PyAudio()
-    # Get default WASAPI info
-    if USE_LOOPBACK:
-        wasapi_info = p.get_host_api_info_by_type(pyaudio.paWASAPI)
-        # Get default WASAPI speakers
-        default_speakers = p.get_device_info_by_index(wasapi_info["defaultOutputDevice"])
-        if not default_speakers["isLoopbackDevice"]:
-            for loopback in p.get_loopback_device_info_generator():
-                if default_speakers["name"] in loopback["name"]:
-                    default_speakers = loopback
-                    break
-        
-        frames_per_buffer = int(config.MIC_RATE / config.FPS)
+    dev_dict = {}
+    wasapi_info = p.get_host_api_info_by_type(pyaudio.paWASAPI)
+    # list all WASAPI devices
+    for i in range(wasapi_info['deviceCount']):
+        device = p.get_device_info_by_host_api_device_index(wasapi_info['index'], i)
+        if device['maxInputChannels'] > 0:
+            dev_dict[device['index']] = device['name']
+
+    return dev_dict
+
+def start_stream(callback, device_index):
+    global IS_STREAMING
+    p = pyaudio.PyAudio()
+    device = p.get_device_info_by_index(device_index)
+    frames_per_buffer = int(config.MIC_RATE / config.FPS)
+    if device['isLoopbackDevice']:
         stream = p.open(format=pyaudio.paInt16,
-                        channels=default_speakers['maxInputChannels'],
-                        rate=config.MIC_RATE,
-                        input=True,
-                        input_device_index=default_speakers['index'],
-                        frames_per_buffer=frames_per_buffer
-                        )
+                    channels=device['maxInputChannels'],
+                    rate=int(device['defaultSampleRate']),
+                    input=True,
+                    frames_per_buffer=frames_per_buffer,
+                    input_device_index=device['index'])
     else:
-        frames_per_buffer = int(config.MIC_RATE / config.FPS)
         stream = p.open(format=pyaudio.paInt16,
                     channels=1,
-                    rate=config.MIC_RATE,
+                    rate=int(device['defaultSampleRate']),
                     input=True,
-                    frames_per_buffer=frames_per_buffer)
-
+                    frames_per_buffer=frames_per_buffer,
+                    input_device_index=device['index'])
     overflows = 0
     prev_ovf_time = time.time()
+    IS_STREAMING = True
+    while IS_STREAMING:
+        if device['isLoopbackDevice']:
+            data = stream.read(frames_per_buffer, exception_on_overflow=False)
+            y = np.frombuffer(data, dtype=np.int16)[::device['maxInputChannels']].astype(np.float32) 
+        else:
+            y = np.fromstring(stream.read(frames_per_buffer, exception_on_overflow=False), dtype=np.int16)
+            y = y.astype(np.float32)
 
-    while True:
-        try:
-            if USE_LOOPBACK:
-                data = stream.read(frames_per_buffer, exception_on_overflow=False)
-                y = np.frombuffer(data, dtype=np.int16)[::default_speakers['maxInputChannels']].astype(np.float32) 
-            else:
-                y = np.fromstring(stream.read(frames_per_buffer, exception_on_overflow=False), dtype=np.int16)
-                y = y.astype(np.float32)
-            callback(y)
-        except IOError:
-            overflows += 1
-            if time.time() > prev_ovf_time + 1:
-                prev_ovf_time = time.time()
-                print('Audio buffer has overflowed {} times'.format(overflows))
+        callback(y)
 
     stream.stop_stream()
     stream.close()
     p.terminate()
 
+def stop_stream():
+    global IS_STREAMING
+    IS_STREAMING = False
+
 if __name__ == '__main__':
     # Start listening to live audio stream
-    start_stream(None)
+    #start_stream(None)
+    list_input_devices()
+    start_stream(None, 18)

@@ -10,13 +10,13 @@ _sock, strip, stick = None, None, None
 
 # Check if device connected using a ping command
 def is_connected():
-    import os
-    hostname = config.UDP_IP
-    response = os.system("ping -n 1 " + hostname)
-    # and then check the response...
-    if response == 0:
+    import subprocess
+    try:
+        # Run the ping command and capture the output
+        output = subprocess.check_output(["ping", "-n", "1", config.UDP_IP])
         return True
-    else:
+    except subprocess.CalledProcessError:
+        # If the ping command fails, the host is not reachable
         return False
 
 # Connect to the device
@@ -55,13 +55,16 @@ def disconnect():
     global CONNECTED, _sock, strip, stick
     # ESP8266 uses WiFi communication
     if config.DEVICE == 'esp8266':
-        _sock.close()
+        if _sock:
+            _sock.close()
     # Raspberry Pi controls the LED strip directly
     elif config.DEVICE == 'pi':
-        strip._cleanup()
+        if strip:
+            strip._cleanup()
     elif config.DEVICE == 'blinkstick':
-        all_off = [0]*(config.N_PIXELS*3)
-        stick.set_led_data(0, all_off)
+        if stick:
+            all_off = [0]*(config.N_PIXELS*3)
+            stick.set_led_data(0, all_off)
 
     CONNECTED = False
 

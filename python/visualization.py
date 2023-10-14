@@ -264,6 +264,10 @@ def toggle_connection():
         CONNECTED = False
         # Add code to handle connection here
 
+def toggle_stream(device_index):
+    microphone.stop_stream()
+    microphone.start_stream(microphone_update, device_index)
+
 if __name__ == '__main__':
     if config.USE_GUI:
         import pyqtgraph as pg
@@ -284,10 +288,24 @@ if __name__ == '__main__':
         # Menu 
         menu_bar = QtWidgets.QMenuBar()
         window.setMenuBar(menu_bar)
-        file_menu = menu_bar.addMenu('File')
+        
+        file_menu = menu_bar.addMenu('LED')
         connect_button = QtWidgets.QAction('Connect', window)
         connect_button.triggered.connect(toggle_connection)
         file_menu.addAction(connect_button)
+
+        devices_menu = menu_bar.addMenu('Devices')
+        device_group = QtWidgets.QActionGroup(window)
+        device_group.setExclusive(True)
+        # List input devices
+        input_devices = microphone.list_input_devices()
+        for i, dev_name in input_devices.items():
+            device_action = QtWidgets.QAction(dev_name, window)
+            device_action.setCheckable(True)
+            device_action.triggered.connect(lambda x, i=i: toggle_stream(i))
+            devices_menu.addAction(device_action)
+            device_group.addAction(device_action)
+
         # Menu actions
         exit_action = QtWidgets.QAction('Exit', window)
         exit_action.setShortcut('Ctrl+Q')
@@ -382,4 +400,4 @@ if __name__ == '__main__':
     # Initialize LEDs
     led.update()
     # Start listening to live audio stream
-    microphone.start_stream(microphone_update)
+    microphone.start_stream(microphone_update, 0)
