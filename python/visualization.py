@@ -251,6 +251,18 @@ y_roll = np.random.rand(config.N_ROLLING_HISTORY, samples_per_frame) / 1e16
 visualization_effect = visualize_spectrum
 """Visualization effect to display on the LED strip"""
 
+# Define a function to toggle connection status
+def toggle_connection():
+    if led.is_connected() and not led.CONNECTED:
+        connect_button.setText('Disconnect')
+        led.connect()
+        CONNECTED = True  
+        # Add code to handle disconnection here
+    else:
+        connect_button.setText('Connect')
+        led.disconnect()
+        CONNECTED = False
+        # Add code to handle connection here
 
 if __name__ == '__main__':
     if config.USE_GUI:
@@ -260,10 +272,27 @@ if __name__ == '__main__':
         app = QtWidgets.QApplication([])
         view = pg.GraphicsView()
         layout = pg.GraphicsLayout(border=(100,100,100))
+        window = QtWidgets.QMainWindow()
         view.setCentralItem(layout)
-        view.show()
+        #view.show()
         view.setWindowTitle('Visualization')
         view.resize(800,600)
+        window.setCentralWidget(view)
+        window.resize(800,600)
+        window.setWindowTitle('Visualization')
+        window.show()
+        # Menu 
+        menu_bar = QtWidgets.QMenuBar()
+        window.setMenuBar(menu_bar)
+        file_menu = menu_bar.addMenu('File')
+        connect_button = QtWidgets.QAction('Connect', window)
+        connect_button.triggered.connect(toggle_connection)
+        file_menu.addAction(connect_button)
+        # Menu actions
+        exit_action = QtWidgets.QAction('Exit', window)
+        exit_action.setShortcut('Ctrl+Q')
+        exit_action.triggered.connect(lambda : window.close() and exit())
+        file_menu.addAction(exit_action)
         # Mel filterbank plot
         fft_plot = layout.addPlot(title='Filterbank Output', colspan=3)
         fft_plot.setRange(yRange=[-0.1, 1.2])

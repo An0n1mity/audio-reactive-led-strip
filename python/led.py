@@ -5,31 +5,65 @@ import platform
 import numpy as np
 import config
 
-# ESP8266 uses WiFi communication
-if config.DEVICE == 'esp8266':
-    import socket
-    _sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-# Raspberry Pi controls the LED strip directly
-elif config.DEVICE == 'pi':
-    import neopixel
-    strip = neopixel.Adafruit_NeoPixel(config.N_PIXELS, config.LED_PIN,
-                                       config.LED_FREQ_HZ, config.LED_DMA,
-                                       config.LED_INVERT, config.BRIGHTNESS)
-    strip.begin()
-elif config.DEVICE == 'blinkstick':
-    from blinkstick import blinkstick
-    import signal
-    import sys
-    #Will turn all leds off when invoked.
-    def signal_handler(signal, frame):
+CONNECTED = False
+_sock, strip, stick = None, None, None
+
+# Check if device connected using a ping command
+def is_connected():
+    import os
+    hostname = config.UDP_IP
+    response = os.system("ping -n 1 " + hostname)
+    # and then check the response...
+    if response == 0:
+        return True
+    else:
+        return False
+
+# Connect to the device
+def connect():
+    global CONNECTED, _sock, strip, stick
+    # ESP8266 uses WiFi communication
+    if config.DEVICE == 'esp8266':
+        import socket
+        _sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    # Raspberry Pi controls the LED strip directly
+    elif config.DEVICE == 'pi':
+        import neopixel
+        strip = neopixel.Adafruit_NeoPixel(config.N_PIXELS, config.LED_PIN,
+                                        config.LED_FREQ_HZ, config.LED_DMA,
+                                        config.LED_INVERT, config.BRIGHTNESS)
+        strip.begin()
+    elif config.DEVICE == 'blinkstick':
+        from blinkstick import blinkstick
+        import signal
+        import sys
+        #Will turn all leds off when invoked.
+        def signal_handler(signal, frame):
+            all_off = [0]*(config.N_PIXELS*3)
+            stick.set_led_data(0, all_off)
+            sys.exit(0)
+
+        stick = blinkstick.find_first()
+        # Create a listener that turns the leds off when the program terminates
+        signal.signal(signal.SIGTERM, signal_handler)
+        signal.signal(signal.SIGINT, signal_handler)
+
+    CONNECTED = True
+
+# Deconnect from the device
+def disconnect():
+    global CONNECTED, _sock, strip, stick
+    # ESP8266 uses WiFi communication
+    if config.DEVICE == 'esp8266':
+        _sock.close()
+    # Raspberry Pi controls the LED strip directly
+    elif config.DEVICE == 'pi':
+        strip._cleanup()
+    elif config.DEVICE == 'blinkstick':
         all_off = [0]*(config.N_PIXELS*3)
         stick.set_led_data(0, all_off)
-        sys.exit(0)
 
-    stick = blinkstick.find_first()
-    # Create a listener that turns the leds off when the program terminates
-    signal.signal(signal.SIGTERM, signal_handler)
-    signal.signal(signal.SIGINT, signal_handler)
+    CONNECTED = False
 
 _gamma = np.load(config.GAMMA_TABLE_PATH)
 """Gamma lookup table used for nonlinear brightness correction"""
@@ -57,7 +91,7 @@ def _update_esp8266():
         g (0 to 255): Green value of LED
         b (0 to 255): Blue value of LED
     """
-    global pixels, _prev_pixels
+    global pixels, _prev_pixels, _sock
     # Truncate values and cast to integer
     pixels = np.clip(pixels, 0, 255).astype(int)
     # Optionally apply gamma correc tio
@@ -89,7 +123,7 @@ def _update_pi():
     Raspberry Pi uses the rpi_ws281x to control the LED strip directly.
     This function updates the LED strip with new values.
     """
-    global pixels, _prev_pixels
+    global pixels, _prev_pixels, strip
     # Truncate values and cast to integer
     pixels = np.clip(pixels, 0, 255).astype(int)
     # Optional gamma correction
@@ -113,7 +147,7 @@ def _update_blinkstick():
     """Writes new LED values to the Blinkstick.
         This function updates the LED strip with new values.
     """
-    global pixels
+    global pixels, _prev_pixels, stick
     
     # Truncate values and cast to integer
     pixels = np.clip(pixels, 0, 255).astype(int)
@@ -137,6 +171,9 @@ def _update_blinkstick():
 
 
 def update():
+    global CONNECTED
+    if not CONNECTED:
+        return
     """Updates the LED strip values"""
     if config.DEVICE == 'esp8266':
         _update_esp8266()
